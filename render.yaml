@@ -1,0 +1,39 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+#
+# Deploy: render.com -> New -> Blueprint -> pick this repository.
+# Notes:
+#   * plan: starter is required — Render's Free plan blocks outbound SMTP
+#     (ports 25/465/587), which would break the Gmail RSVP emails, and Free
+#     services cannot mount a disk.
+#   * The disk keeps data/rsvps.jsonl and invitations.json alive across deploys.
+services:
+  - type: web
+    name: kishin-jessica-invitation
+    runtime: node
+    plan: starter
+    region: singapore
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 22.11.0
+      - key: DATA_DIR
+        value: /var/data
+      - key: FROM_NAME
+        value: Kishin & Jessica
+      - key: GMAIL_USER
+        sync: false
+      - key: GMAIL_APP_PASSWORD
+        sync: false
+      - key: RSVP_TO_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_SESSION_SECRET
+        generateValue: true
+    disk:
+      name: rsvp-data
+      mountPath: /var/data
+      sizeGB: 1

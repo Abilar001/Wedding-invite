@@ -1,0 +1,16 @@
+[
+  {
+    "name": "Santos Family",
+    "email": "maria@example.com",
+    "seats": 4
+  },
+  {
+    "name": "Dela Cruz Family",
+    "email": "juan@example.com",
+    "seats": 2
+  },
+  {
+    "name": "Ana Lopez",
+    "seats": 2
+  }
+]
