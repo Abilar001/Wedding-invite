@@ -505,11 +505,10 @@ em { font-style: italic; color: var(--wine); }
   clip-path: polygon(0 0, 100% 0, 50% 100%);
   box-shadow: 0 10px 22px -10px rgba(0, 0, 0, .55);
 }
-/* Sits at the centre of the envelope face, straddling the flap tip and the
-   front pocket like a pressed wax seal. It must stay a sibling of .env-flap:
-   as a child, its `top` resolved against the 56%-tall flap box and parked the
-   seal a third of the way up the envelope, and the flap's clip-path triangle
-   would shear off its lower edge. */
+/* Centred on the envelope face, over the fold where the flap tip meets the
+   front pocket. It must stay a sibling of .env-flap: as a child, `top`
+   resolved against the 56%-tall flap box instead of the whole envelope, so the
+   seal parked above the real centre. */
 .env-seal {
   position: absolute;
   left: 50%;
@@ -532,27 +531,16 @@ em { font-style: italic; color: var(--wine); }
   transition: transform .5s var(--ease), opacity .5s var(--ease);
   z-index: 7;
 }
-/* Keeps K, &, J optically centred inside the circle: flex centring plus a
-   line-height of 1 stops the script font's ascenders/descender from pushing
-   the monogram off-centre, and the gap replaces trailing letter-spacing. */
-.env-seal__mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: .06em;
-  font-family: var(--font-display);
-  font-size: clamp(.8rem, 2.4vw, .98rem);
-  letter-spacing: 0;
-  line-height: 1;
-  white-space: nowrap;
-  padding-bottom: .04em;
-}
-.env-seal__amp {
-  font-family: var(--font-script);
-  font-size: .9em;
-  line-height: 1;
-  color: #5C1020;
-  transform: translateY(-.03em);
+/* The seal carries the same K&J artwork as the card (assets/KJ.jpg). The JPEG
+   has a white field, so multiply blends that field into the champagne gradient
+   and leaves only the dark letters, like a stamp pressed into wax. */
+.env-seal__photo {
+  display: block;
+  width: 64%;
+  height: 64%;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+  pointer-events: none;
 }
 
 /* opening sequence states */
@@ -564,6 +552,37 @@ em { font-style: italic; color: var(--wine); }
 .envelope.is-open { transform: rotateX(0) rotateZ(0) scale(1.02); }
 .envelope.is-finished .env-card { transform: translate3d(0, -70%, 200px) scale(.6); opacity: 0; }
 .envelope.is-finished { opacity: 0; transition: opacity .7s var(--ease), transform .7s var(--ease); }
+
+/* The YouTube player is clipped to 1px so guests never see the embed, while
+   the iframe inside keeps its real 200x113 box so audio keeps playing.
+   `.is-visible` is the escape hatch: if the browser blocks autoplay, the card
+   is shown so one tap can start the song, then it hides again. */
+.music-player {
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  z-index: 1;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: #26090F;
+}
+.music-player.is-visible {
+  left: clamp(.8rem, 3vw, 1.6rem);
+  bottom: clamp(.8rem, 3vw, 1.6rem);
+  z-index: 55;
+  width: 200px;
+  height: auto;
+  opacity: 1;
+  pointer-events: auto;
+  border-radius: 10px;
+  box-shadow: 0 18px 32px -18px rgba(0, 0, 0, .85), 0 0 0 1px rgba(214, 184, 120, .3);
+}
+.music-player[hidden] { display: none; }
+.music-player__frame { width: 200px; height: 113px; border-radius: 10px; overflow: hidden; background: #1B060D; }
+.music-player__frame iframe { display: block; width: 100%; height: 100%; border: 0; }
 
 /* 5. NAVIGATION -------------------------------------------------------- */
 .nav {

@@ -1,204 +1,167 @@
 /* ==========================================================================
-   Background music — "Two Hearts" (original piano arrangement)
-   Generated live with the Web Audio API so the site ships without any
-   copyrighted audio file. Loops continuously with smooth fades.
+   Background music — "When God Made You" (piano karaoke instrumental)
+   Played through the official YouTube IFrame player, which is the only way to
+   use a YouTube track on a website without ripping its audio. The player sits
+   in a 1px-clipped card so guests never see the embed; the iframe keeps its
+   real 200x113 size inside, which is what keeps playback healthy.
+
+   If the browser refuses to start audio without a gesture, the card is shown
+   long enough for one tap and hides itself again once the song is playing.
+
+   The script is loaded on the first press, not on page load, so the
+   invitation makes no third-party request until a guest asks for music.
    ========================================================================== */
-(function (window) {
+(function (window, document) {
   'use strict';
 
-  var AC = window.AudioContext || window.webkitAudioContext;
-  var BPM = 72;
-  var STEP = (60 / BPM) / 2; // eighth note
-
-  // I – V – vi – IV in D major, voiced for a soft piano feel.
-  var PROGRESSION = [
-    { bass: 38, notes: [50, 57, 62, 66] }, // D
-    { bass: 45, notes: [45, 52, 57, 61] }, // A
-    { bass: 47, notes: [47, 54, 59, 62] }, // Bm
-    { bass: 43, notes: [43, 50, 55, 59] }  // G
-  ];
-  var PATTERN = [0, 1, 2, 3, 2, 1, 2, 3];
-
-  function midiToHz(m) {
-    return 440 * Math.pow(2, (m - 69) / 12);
-  }
-
-  function makeImpulse(ctx, seconds, decay) {
-    var rate = ctx.sampleRate;
-    var length = Math.floor(rate * seconds);
-    var buffer = ctx.createBuffer(2, length, rate);
-    for (var ch = 0; ch < 2; ch++) {
-      var data = buffer.getChannelData(ch);
-      for (var i = 0; i < length; i++) {
-        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, decay);
-      }
-    }
-    return buffer;
-  }
+  var VIDEO_ID = 'hWCzG6unIUw';
+  var API_SRC = 'https://www.youtube.com/iframe_api';
+  var EMBED_HOST = 'https://www.youtube-nocookie.com';
 
   function Engine() {
-    this.ctx = null;
-    this.fade = null;
-    this.out = null;
-    this.convolver = null;
-    this.timer = null;
-    this.nextNoteTime = 0;
-    this.step = 0;
+    this.player = null;
+    this.ready = false;
     this.playing = false;
     this.muted = false;
-    this.ready = false;
+    this.requested = false;
+    this.guard = null;
+    this.onChange = null;
   }
 
   Engine.prototype.isSupported = function () {
-    return !!AC;
+    return typeof document !== 'undefined';
   };
 
-  Engine.prototype._init = function () {
-    if (this.ctx) return true;
-    if (!AC) return false;
+  Engine.prototype._emit = function () {
+    if (typeof this.onChange === 'function') this.onChange(this.playing);
+  };
 
-    try {
-      this.ctx = new AC();
-    } catch (err) {
-      return false;
+  /* The card exists only once the player does, so a failed embed never leaves
+     an empty hole in the layout. It stays clipped unless playback needs a tap. */
+  Engine.prototype._mount = function () {
+    var panel = document.getElementById('musicPlayer');
+    if (panel) {
+      panel.removeAttribute('hidden');
+      panel.removeAttribute('aria-hidden');
+    }
+  };
+
+  Engine.prototype._show = function () {
+    var panel = document.getElementById('musicPlayer');
+    if (panel) panel.classList.add('is-visible');
+  };
+
+  Engine.prototype._hide = function () {
+    var panel = document.getElementById('musicPlayer');
+    if (panel) panel.classList.remove('is-visible');
+  };
+
+  Engine.prototype._loadApi = function (done) {
+    if (window.YT && window.YT.Player) {
+      done();
+      return;
     }
 
-    var ctx = this.ctx;
-    this.out = ctx.createGain();
-    this.out.gain.value = 0.4;
-    this.out.connect(ctx.destination);
-
-    this.fade = ctx.createGain();
-    this.fade.gain.value = 0;
-    this.fade.connect(this.out);
-
-    if (ctx.createConvolver) {
-      this.convolver = ctx.createConvolver();
-      this.convolver.buffer = makeImpulse(ctx, 2.4, 2.6);
-      var wet = ctx.createGain();
-      wet.gain.value = 0.26;
-      this.convolver.connect(wet);
-      wet.connect(this.out);
+    if (!window.__kjYtQueue) {
+      window.__kjYtQueue = [];
+      window.onYouTubeIframeAPIReady = function () {
+        var queue = window.__kjYtQueue || [];
+        window.__kjYtQueue = null;
+        for (var i = 0; i < queue.length; i++) queue[i]();
+      };
     }
+    window.__kjYtQueue.push(done);
 
-    this.ready = true;
-    return true;
-  };
-
-  Engine.prototype._voice = function (midi, time, velocity) {
-    var ctx = this.ctx;
-    var freq = midiToHz(midi);
-
-    var gain = ctx.createGain();
-    gain.gain.setValueAtTime(0.0001, time);
-    gain.gain.linearRampToValueAtTime(velocity, time + 0.014);
-    gain.gain.exponentialRampToValueAtTime(0.0008, time + 2.6);
-    gain.connect(this.fade);
-    if (this.convolver) gain.connect(this.convolver);
-
-    var main = ctx.createOscillator();
-    main.type = 'triangle';
-    main.frequency.value = freq;
-
-    var upper = ctx.createOscillator();
-    upper.type = 'sine';
-    upper.frequency.value = freq * 2.002;
-
-    var upperGain = ctx.createGain();
-    upperGain.gain.value = 0.24;
-
-    main.connect(gain);
-    upper.connect(upperGain);
-    upperGain.connect(gain);
-
-    var stopAt = time + 2.8;
-    main.start(time);
-    upper.start(time);
-    main.stop(stopAt);
-    upper.stop(stopAt);
-  };
-
-  Engine.prototype._step = function (index, time) {
-    var chord = PROGRESSION[Math.floor(index / 8) % PROGRESSION.length];
-    var beat = index % 8;
-    var midi = chord.notes[PATTERN[beat]];
-
-    this._voice(midi, time, beat === 0 ? 0.16 : 0.105);
-    if (beat === 0 || beat === 4) this._voice(chord.bass, time, 0.14);
-    if (beat === 4) this._voice(midi + 12, time, 0.075);
-  };
-
-  Engine.prototype._tick = function () {
-    if (!this.ctx) return;
-    var horizon = this.ctx.currentTime + 0.5;
-    while (this.nextNoteTime < horizon) {
-      this._step(this.step, this.nextNoteTime);
-      this.nextNoteTime += STEP;
-      this.step++;
+    if (!document.getElementById('yt-iframe-api')) {
+      var script = document.createElement('script');
+      script.id = 'yt-iframe-api';
+      script.src = API_SRC;
+      script.async = true;
+      document.head.appendChild(script);
     }
+  };
+
+  Engine.prototype._create = function () {
+    var self = this;
+    if (this.player) return;
+    if (!window.YT || !window.YT.Player) return;
+    if (!document.getElementById('ytAudio')) return;
+
+    this._mount();
+
+    this.player = new window.YT.Player('ytAudio', {
+      host: EMBED_HOST,
+      videoId: VIDEO_ID,
+      playerVars: {
+        autoplay: this.requested ? 1 : 0,
+        controls: 1,
+        disablekb: 1,
+        modestbranding: 1,
+        iv_load_policy: 3,
+        cc_load_policy: 0,
+        playsinline: 1,
+        rel: 0,
+        loop: 1,
+        playlist: VIDEO_ID
+      },
+      events: {
+        onReady: function (event) {
+          self.ready = true;
+          if (self.muted) event.target.mute();
+          if (self.requested) event.target.playVideo();
+        },
+        onStateChange: function (event) {
+          var states = window.YT.PlayerState || {};
+          self.playing = event.data === states.PLAYING;
+          if (self.playing) {
+            window.clearTimeout(self.guard);
+            self.guard = null;
+            self._hide();
+          }
+          self._emit();
+        }
+      }
+    });
   };
 
   Engine.prototype.play = function () {
-    if (!this._init()) return false;
-    var ctx = this.ctx;
+    var self = this;
+    this.requested = true;
 
-    var start = function () {
-      this.playing = true;
-      this.nextNoteTime = ctx.currentTime + 0.08;
+    /* Autoplay may be blocked because the iframe is created asynchronously,
+       after the click has expired. Give it a moment, then surface the card so
+       the guest can start the song with one tap instead of silence. */
+    window.clearTimeout(this.guard);
+    this.guard = window.setTimeout(function () {
+      self.guard = null;
+      if (!self.playing) self._show();
+    }, 2600);
 
-      var now = ctx.currentTime;
-      this.out.gain.cancelScheduledValues(now);
-      this.out.gain.setValueAtTime(this.muted ? 0 : 0.4, now);
-      this.fade.gain.cancelScheduledValues(now);
-      this.fade.gain.setValueAtTime(Math.max(this.fade.gain.value, 0.0001), now);
-      this.fade.gain.linearRampToValueAtTime(1, now + 2.4);
-
-      if (this.timer) window.clearInterval(this.timer);
-      this.timer = window.setInterval(this._tick.bind(this), 120);
-      this._tick();
-    }.bind(this);
-
-    if (ctx.state === 'suspended') {
-      var resumed = ctx.resume();
-      if (resumed && typeof resumed.then === 'function') {
-        resumed.then(start).catch(function () { /* autoplay still blocked */ });
-      } else {
-        start();
-      }
-    } else {
-      start();
+    if (this.ready && this.player) {
+      if (this.muted && this.player.mute) this.player.mute();
+      this.player.playVideo();
+      return true;
     }
+
+    this._loadApi(function () { self._create(); });
     return true;
   };
 
   Engine.prototype.pause = function () {
-    if (!this.ctx || !this.playing) return;
-    var ctx = this.ctx;
-    var now = ctx.currentTime;
-
+    this.requested = false;
     this.playing = false;
-    this.fade.gain.cancelScheduledValues(now);
-    this.fade.gain.setValueAtTime(this.fade.gain.value, now);
-    this.fade.gain.linearRampToValueAtTime(0.0001, now + 0.9);
-
-    window.setTimeout(function () {
-      if (this.playing) return;
-      if (this.timer) {
-        window.clearInterval(this.timer);
-        this.timer = null;
-      }
-      if (ctx.state === 'running') ctx.suspend();
-    }.bind(this), 1000);
+    window.clearTimeout(this.guard);
+    this.guard = null;
+    if (this.player && this.ready) this.player.pauseVideo();
+    this._emit();
   };
 
   Engine.prototype.setMuted = function (muted) {
     this.muted = !!muted;
-    if (!this.out) return;
-    var now = this.ctx.currentTime;
-    this.out.gain.cancelScheduledValues(now);
-    this.out.gain.setValueAtTime(this.out.gain.value, now);
-    this.out.gain.linearRampToValueAtTime(this.muted ? 0 : 0.4, now + 0.35);
+    if (!this.player || !this.ready) return;
+    if (this.muted) this.player.mute();
+    else this.player.unMute();
   };
 
   window.WeddingMusic = new Engine();
-}(window));
+}(window, document));

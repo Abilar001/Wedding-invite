@@ -13,7 +13,7 @@
   var CONFIG = {
     messengerUsername: '',     // e.g. 'kishin.pelipil' — enables one-tap Messenger sending as a fallback
     rsvpEmail: '',             // optional address for the "Send by email" fallback button
-    rsvpEndpoint: '/api/rsvp'  // SMTP backend (see server/index.js)
+    rsvpEndpoint: '/api/rsvp'  // server-side email delivery (see server/index.js)
   };
 
   var WEDDING_DATE_ISO = '2026-12-08T14:00:00+08:00';
@@ -178,13 +178,11 @@
       if (opened) return;
       opened = true;
 
-      // Music is allowed to start after this explicit user gesture.
+      // Music is allowed to start after this explicit user gesture. The player
+      // reports back once it really is playing, so the control never claims
+      // sound that the browser blocked.
       if (window.WeddingMusic) {
-        var started = window.WeddingMusic.play();
-        if (started) {
-          setMusicUI(true);
-          announce('Background music started.');
-        }
+        window.WeddingMusic.play();
       }
 
       if (prefersReducedMotion() || !envelope) {
@@ -252,6 +250,17 @@
       return;
     }
 
+    // The YouTube player is the source of truth for whether sound is running.
+    var announced = false;
+    engine.onChange = function (isPlaying) {
+      setMusicUI(isPlaying);
+      if (isPlaying && !announced) {
+        announce('Background music playing.');
+        announced = true;
+      }
+      if (!isPlaying) announced = false;
+    };
+
     on(toggle, 'click', function () {
       if (engine.playing) {
         engine.pause();
@@ -259,8 +268,7 @@
         announce('Background music paused.');
       } else {
         engine.play();
-        setMusicUI(true);
-        announce('Background music playing.');
+        announce('Starting background music.');
       }
     });
 
@@ -836,7 +844,8 @@
       });
     }
 
-    // POSTs the RSVP to the SMTP backend. The manual send panel is only shown
+    // POSTs the RSVP to the server, which emails the couple over an HTTPS API.
+    // The manual send panel is only shown
     // when the server is genuinely unreachable — never as a fake success.
     function sendToServer(info, text) {
       if (!CONFIG.rsvpEndpoint || typeof window.fetch !== 'function') {

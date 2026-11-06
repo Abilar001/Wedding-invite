@@ -4,7 +4,7 @@ A single-page, cinematic wedding invitation for **Kishin & Jessica A. Pelipil** 
 
 ## Run locally
 
-**With live RSVP email** (recommended) — `npm install`, copy `.env.example` to `.env` and fill in the Gmail App Password, then `npm start`. See [RSVP backend](#rsvp-backend-gmail-smtp).
+**With live RSVP email** (recommended) — `npm install`, copy `.env.example` to `.env` and fill in a Brevo API key and sender address, then `npm start`. See [RSVP backend](#rsvp-backend-brevo-https-api).
 
 **Static preview only** — no build step, no dependencies:
 
@@ -25,15 +25,15 @@ Then open <http://localhost:5173>.
 
 ```
 server/index.js     Express server: serves the site, POST /api/rsvp (validation, rate limit)
-server/mail.js      Nodemailer Gmail transport + couple and guest email templates
+server/mail.js      Brevo HTTPS email API + couple and guest email templates
 server/admin.js     Password-protected RSVP dashboard at /admin
 package.json        npm start / npm run dev
-.env.example        Gmail credentials template
+.env.example        Brevo credentials template
 index.html          All markup (sections, envelope, nav, modals) + inline SVG icon sprite
 css/styles.css      Design tokens, 3D envelope, layout, animations, responsive rules
 js/app.js           Loader, envelope sequence, nav, reveals, parallax, countdown,
                     gallery + lightbox, RSVP flow, music controls
-js/music.js         Original piano/"Two Hearts" generated with the Web Audio API
+js/music.js         YouTube IFrame player for the couple's song (play/pause/mute)
 assets/             Gallery placeholder images, favicon
 ```
 
@@ -44,10 +44,10 @@ assets/             Gallery placeholder images, favicon
 | Envelope / **Open Invitation** | 3D flap rotation, wax seal dissolve, card lift, cinematic hand-off to the hero, music starts |
 | **Enter without animation** | Skips the intro for guests who prefer no motion |
 | Navigation + mobile menu | Smooth scroll, sticky bar, active-section highlight, Escape/outside-click closes |
-| Music FAB (play/pause + mute) | Loops the piano piece with 2.4 s fade-in, 0.9 s fade-out, animated equaliser |
+| Music FAB (play/pause + mute) | Drives the YouTube track; the equaliser and label follow the player's real state, not a guess. The player is clipped to 1px, and only appears as a small card if the browser blocks autoplay and needs one tap |
 | Countdown | Live days/hours/minutes/seconds to `2026-12-08T14:00:00+08:00`; celebratory message on the day |
 | Gallery arrows / dots / photos | Scroll-snap carousel, per-photo dots, arrow keys and Escape in the lightbox |
-| RSVP | Validates the form, sends it to the SMTP backend, emails the couple and confirms to the guest (falls back to copy/Messenger when no server is running) |
+| RSVP | Validates the form, sends it to the email API, emails the couple and confirms to the guest (falls back to copy/Messenger when no server is running) |
 | Get Directions | Google Maps search links for both venues |
 | Scroll-to-top | Appears after 480 px, returns focus to the monogram |
 
@@ -70,18 +70,20 @@ details. Responses are also kept in `localStorage` on the guest's device as a dr
 For live delivery use the backend above. Otherwise point `rsvpEmail` at your address, or swap the submit handler for a Google Form /
 Formspree / Firebase endpoint inside `js/app.js` → section 10.
 
-## RSVP backend (Gmail SMTP)
+## RSVP backend (Brevo HTTPS API)
 
 The site also runs as a plain static page, but with the included Node server the RSVP form delivers real mail:
 
 - **To the couple** — a formatted "New RSVP" email with `Reply-To` set to the guest, so replying answers them directly.
 - **To the guest** — a confirmation email with their submitted details and both venue addresses.
 
-A guest only sees "sent" after the SMTP server has accepted the couple's notification.
+Mail is sent over HTTPS to Brevo's transactional API instead of through SMTP, so the same code works on hosts that block outbound mail ports. Brevo's free plan covers 300 emails a day — far more than a wedding needs — and lets you verify a single sender address, so no domain or paid plan is required. Free-plan mail carries a small "Sent with Brevo" sticker; only a paid plan removes it.
 
-### 1. Create a Gmail App Password
+A guest only sees "sent" after the API has accepted the couple's notification.
 
-Gmail rejects normal passwords over SMTP. In the sending account: *Security → 2-Step Verification → App passwords → create one for "Mail"*. Copy the 16-character value.
+### 1. Get a Brevo API key
+
+Create a free account at <https://brevo.com>. Under *Senders, Domains and IPs* add your address (a Gmail address is fine) and enter the six-digit code Brevo emails you. Then open *SMTP & API → API Keys* and create one; it looks like `xkeysib-…`.
 
 ### 2. Configure
 
@@ -93,12 +95,14 @@ cp .env.example .env
 Edit `.env`:
 
 ```
-GMAIL_USER=your.address@gmail.com
-GMAIL_APP_PASSWORD=the16charaPpPassword
+BREVO_API_KEY=xkeysib-your-api-key
+RSVP_FROM_EMAIL=your.address@gmail.com
 RSVP_TO_EMAIL=your.address@gmail.com
 FROM_NAME=Kishin & Jessica
 PORT=3000
 ```
+
+`RSVP_FROM_EMAIL` must be the verified sender — Brevo rejects any other address.
 
 ### 3. Run
 
@@ -106,7 +110,7 @@ PORT=3000
 npm start
 ```
 
-Open <http://localhost:3000>. The console prints `SMTP login OK` when the credentials work. If they do not, the form reports a delivery failure instead of pretending to succeed.
+Open <http://localhost:3000>. The console prints `API key and sender accepted` when Brevo accepts the credentials. If it does not, the form reports a delivery failure instead of pretending to succeed.
 
 ### API
 
@@ -119,12 +123,12 @@ Open <http://localhost:3000>. The console prints `SMTP login OK` when the creden
 
 | Response | Meaning |
 | --- | --- |
-| `200 {ok:true, confirmationSent:true}` | Both emails accepted by SMTP |
+| `200 {ok:true, confirmationSent:true}` | Both emails accepted by Brevo |
 | `200 {ok:true, confirmationSent:false}` | Couple notified; the guest confirmation failed |
 | `400 {ok:false, fields:{…}}` | Validation failed |
 | `429` | More than 5 replies from one IP within 10 minutes |
 | `502` | Delivery to the couple failed — the guest is asked to send manually |
-| `503` | `GMAIL_*` credentials are missing |
+| `503` | `BREVO_API_KEY` / `RSVP_FROM_EMAIL` are missing |
 
 `GET /api/health` reports whether mail is configured. Replies are also appended to `data/rsvps.jsonl` (git-ignored) so a mail hiccup never loses a response, and `.env` / `server/` are never served publicly.
 
@@ -168,19 +172,20 @@ The breakdown table shows every party with invited seats, status, confirmed head
 
 ### Deploying with email
 
-GitHub Pages, Netlify and Vercel cannot run Node, so the form falls back to the copy-and-send panel there. Live email and `/admin` need a long-running Node process, and the cheap tiers throttle it:
+GitHub Pages, Netlify and Vercel cannot run Node, so the form falls back to the copy-and-send panel there. Live email and `/admin` need a long-running Node process.
 
-- **Render** — Free blocks outbound SMTP (ports 25/465/587 since Sep 2025) and cannot mount a disk. Any paid instance type (Starter, about $7/mo) allows both.
-- **Railway** — outbound SMTP is disabled below the Pro plan.
-- **Fly.io / a small VPS** — full SMTP egress; volumes need extra setup.
+Because mail leaves over HTTPS, free tiers now work:
 
-This repo ships `render.yaml`, a blueprint that runs the server on a Starter instance with a 1 GB disk mounted at `/var/data` and `DATA_DIR` pointed at it, so `rsvps.jsonl` survives every deploy:
+- **Render** — the free plan blocks outbound SMTP (ports 25/465/587 since Sep 2025), which no longer matters. It has no persistent disk, so `rsvps.jsonl` survives only as long as the instance, and a sleeping service takes about 30 seconds to wake on the first visit after 15 idle minutes. Every reply is still delivered to the couple's inbox, which is the real record; `/admin` is a convenience view.
+- **Railway, Fly.io, a small VPS** — any host that runs Node and can reach `https://api.brevo.com`.
+
+This repo ships `render.yaml`, a blueprint for a free instance:
 
 1. Push the repository to GitHub (`git init`, stage, commit, then add your remote).
 2. On Render: **New → Blueprint**, pick the repo. Render creates the service and prompts for the values marked `sync: false`.
-3. Enter `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `RSVP_TO_EMAIL` and `ADMIN_PASSWORD`; `DATA_DIR`, `FROM_NAME` and `ADMIN_SESSION_SECRET` come from the blueprint.
+3. Enter `BREVO_API_KEY`, `RSVP_FROM_EMAIL`, `RSVP_TO_EMAIL` and `ADMIN_PASSWORD`; `FROM_NAME` and `ADMIN_SESSION_SECRET` come from the blueprint.
 4. Wait for the `/api/health` check to go green, open the URL, and sign in at `/admin`.
-5. Optional: write `invitations.json` to `/var/data` (see above) to show pending parties.
+5. Optional: to keep the dashboard across deploys, move the service to a paid instance type, add a disk mounted at `/var/data`, and set `DATA_DIR=/var/data`. That is also where `invitations.json` belongs when you want pending parties listed.
 
 Render terminates HTTPS for you, which the admin session cookie depends on. Keep `ADMIN_SESSION_SECRET` fixed so sign-ins survive restarts.
 

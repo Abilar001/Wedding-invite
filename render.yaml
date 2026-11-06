@@ -1,16 +1,17 @@
 # Render Blueprint — https://render.com/docs/blueprint-spec
 #
 # Deploy: render.com -> New -> Blueprint -> pick this repository.
-# Notes:
-#   * plan: starter is required — Render's Free plan blocks outbound SMTP
-#     (ports 25/465/587), which would break the Gmail RSVP emails, and Free
-#     services cannot mount a disk.
-#   * The disk keeps data/rsvps.jsonl and invitations.json alive across deploys.
+#
+# The free plan works here because RSVP mail goes out over HTTPS (Brevo), not
+# SMTP: Render blocks outbound SMTP on ports 25/465/587 for free services.
+# Free services have no persistent disk, so data/rsvps.jsonl lives only as long
+# as the instance — it is a backup of the emails, not the system of record.
+# Add a disk (paid instance type) if the /admin dashboard must survive redeploys.
 services:
   - type: web
     name: kishin-jessica-invitation
     runtime: node
-    plan: starter
+    plan: free
     region: singapore
     buildCommand: npm ci --omit=dev
     startCommand: npm start
@@ -19,13 +20,12 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 22.11.0
-      - key: DATA_DIR
-        value: /var/data
       - key: FROM_NAME
         value: Kishin & Jessica
-      - key: GMAIL_USER
+      - key: BREVO_API_KEY
         sync: false
-      - key: GMAIL_APP_PASSWORD
+      # Must match the sender address verified in Brevo (Senders, Domains and IPs).
+      - key: RSVP_FROM_EMAIL
         sync: false
       - key: RSVP_TO_EMAIL
         sync: false
@@ -33,7 +33,3 @@ services:
         sync: false
       - key: ADMIN_SESSION_SECRET
         generateValue: true
-    disk:
-      name: rsvp-data
-      mountPath: /var/data
-      sizeGB: 1

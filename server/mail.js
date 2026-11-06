@@ -1,43 +1,73 @@
-import nodemailer from 'nodemailer';
+/* Email delivery over HTTPS instead of SMTP.
+   Brevo's transactional API is used because it works on hosts that block
+   outbound SMTP (Render's free plan, for example) and a free account can
+   verify a single sender address, so no domain is required. */
 
-const USER = (process.env.GMAIL_USER || '').trim();
-const PASS = (process.env.GMAIL_APP_PASSWORD || '').trim();
-const TO = (process.env.RSVP_TO_EMAIL || USER).trim();
+const API_KEY = (process.env.BREVO_API_KEY || '').trim();
+const FROM_EMAIL = (process.env.RSVP_FROM_EMAIL || '').trim();
+const TO = (process.env.RSVP_TO_EMAIL || FROM_EMAIL).trim();
 const FROM_NAME = (process.env.FROM_NAME || 'Kishin & Jessica Wedding').trim();
 
-const HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
-const PORT = Number(process.env.SMTP_PORT || 465);
-const SECURE = process.env.SMTP_SECURE
-  ? process.env.SMTP_SECURE === 'true'
-  : PORT === 465;
+const API_BASE = 'https://api.brevo.com/v3';
+const TIMEOUT_MS = 20000;
 
 export const COUPLE_EMAIL = TO;
 
 export function isMailConfigured() {
-  return Boolean(USER && PASS && TO);
+  return Boolean(API_KEY && FROM_EMAIL && TO);
 }
 
-let transporter = null;
+async function brevo(pathname, init) {
+  const options = init || {};
+  const res = await fetch(API_BASE + pathname, {
+    method: options.method || 'GET',
+    headers: {
+      'api-key': API_KEY,
+      accept: 'application/json',
+      ...(options.headers || {})
+    },
+    body: options.body,
+    signal: AbortSignal.timeout(TIMEOUT_MS)
+  });
 
-export function getTransporter() {
-  if (!transporter) {
-    transporter = nodemailer.createTransport({
-      host: HOST,
-      port: PORT,
-      secure: SECURE,
-      auth: { user: USER, pass: PASS },
-      connectionTimeout: 15000,
-      greetingTimeout: 15000,
-      socketTimeout: 20000
-    });
+  const payload = await res.json().catch(() => null);
+
+  if (!res.ok) {
+    const detail = payload && (payload.message || payload.error || payload.code);
+    const err = new Error('Brevo API ' + res.status + (detail ? ': ' + detail : ''));
+    err.status = res.status;
+    throw err;
   }
-  return transporter;
+
+  return payload;
 }
 
 export async function verifyMailer() {
   if (!isMailConfigured()) return false;
-  await getTransporter().verify();
+  await brevo('/account');
   return true;
+}
+
+/* Single delivery helper. Brevo wants HTML and plain text in separate fields,
+   and treats `sender` as the From address (it must be a verified sender). */
+function send({ to, toName, replyTo, replyToName, subject, text, html }) {
+  const recipient = toName ? { email: to, name: toName } : { email: to };
+  const reply = replyTo
+    ? (replyToName ? { email: replyTo, name: replyToName } : { email: replyTo })
+    : undefined;
+
+  return brevo('/smtp/email', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      sender: { email: FROM_EMAIL, name: FROM_NAME },
+      to: [recipient],
+      ...(reply ? { replyTo: reply } : {}),
+      subject,
+      htmlContent: html,
+      textContent: text
+    })
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -52,10 +82,6 @@ function esc(value) {
 
 function nl2br(value) {
   return esc(value).replace(/\r?\n/g, '<br>');
-}
-
-function fromHeader() {
-  return '"' + FROM_NAME.replace(/"/g, '') + '" <' + USER + '>';
 }
 
 function attendanceLabel(rsvp) {
@@ -126,10 +152,11 @@ export function sendCoupleNotification(rsvp) {
     'Reply to this email to answer the guest directly.'
   ].filter(Boolean).join('\n');
 
-  return getTransporter().sendMail({
-    from: fromHeader(),
+  return send({
     to: TO,
+    toName: 'Kishin & Jessica',
     replyTo: rsvp.email,
+    replyToName: rsvp.name,
     subject: 'New RSVP - ' + rsvp.name + ' (' + attendanceLabel(rsvp) + ')',
     text: text,
     html: shell(inner)
@@ -183,10 +210,11 @@ export function sendGuestConfirmation(rsvp) {
     'Replying to this email reaches the couple directly.'
   ].filter(Boolean).join('\n');
 
-  return getTransporter().sendMail({
-    from: fromHeader(),
+  return send({
     to: rsvp.email,
+    toName: rsvp.name,
     replyTo: TO,
+    replyToName: 'Kishin & Jessica',
     subject: 'Your RSVP to Kishin & Jessica - December 08, 2026',
     text: text,
     html: shell(inner)

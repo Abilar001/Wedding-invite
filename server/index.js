@@ -209,12 +209,12 @@ const server = app.listen(PORT, () => {
   console.log('  Kishin & Jessica - wedding invitation');
   console.log('  Local:  http://localhost:' + PORT);
   if (isMailConfigured()) {
-    console.log('  RSVP:   Gmail SMTP via ' + (process.env.SMTP_HOST || 'smtp.gmail.com'));
+    console.log('  RSVP:   Brevo HTTPS API');
     verifyMailer()
-      .then(() => console.log('  RSVP:   SMTP login OK'))
-      .catch((err) => console.error('  RSVP:   SMTP login failed -', err.message));
+      .then(() => console.log('  RSVP:   API key and sender accepted'))
+      .catch((err) => console.error('  RSVP:   API check failed -', err.message));
   } else {
-    console.warn('  RSVP:   not configured. Add GMAIL_USER and GMAIL_APP_PASSWORD to .env');
+    console.warn('  RSVP:   not configured. Add BREVO_API_KEY and RSVP_FROM_EMAIL to .env');
   }
   console.log('');
 });
