@@ -189,6 +189,10 @@ Abasthan runs Node web services directly, so the RSVP email and `/admin` both wo
 4. Deploy, then check `/api/health` reports `"mail":"configured"` and sign in at `/admin`.
 5. Turn on **Auto-Deploy** so pushes to `main` roll out automatically.
 
+Missing variables never crash the app: it still boots, `/api/health` reports `"mail":"missing-credentials"`, RSVP submissions return `503`, and `/admin` returns `503`. So you can deploy first and add secrets afterwards — open the service's **Environment** tab, save the keys, then press **Redeploy** (or restart) so the process picks them up.
+
+The repo ships a root `index.js` entry point and a `build` script, so Abasthan's detected `npm install && npm run build` and either start command (`npm start` or `node index.js`) all work. If you fill the build command in by hand, `npm ci --omit=dev` is enough; if the app crashes on boot, check that the start command is not pointing at a file the repo does not have.
+
 The free plan gives one app a `https://<name>.abasthan.app` URL with SSL. For a custom domain, add it under the service's **Custom Domains** settings and create the CNAME the dashboard shows (subdomain → `abasthan.app`) or the A record it gives for an apex domain.
 
 Containers are rebuilt from Git on every deploy, so `data/rsvps.jsonl` and `data/invitations.json` are lost each time; the couple's inbox remains the record and `/admin` is a view of whatever the current instance holds.

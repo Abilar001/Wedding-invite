@@ -6,7 +6,8 @@
   "description": "3D wedding invitation for Kishin & Jessica with an HTTPS email RSVP backend",
   "scripts": {
     "start": "node server/index.js",
-    "dev": "node --watch server/index.js"
+    "dev": "node --watch server/index.js",
+    "build": "echo no build step needed"
   },
   "engines": {
     "node": ">=18"
