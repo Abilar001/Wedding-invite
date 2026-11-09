@@ -179,7 +179,21 @@ Because mail leaves over HTTPS, free tiers now work:
 - **Render** — the free plan blocks outbound SMTP (ports 25/465/587 since Sep 2025), which no longer matters. It has no persistent disk, so `rsvps.jsonl` survives only as long as the instance, and a sleeping service takes about 30 seconds to wake on the first visit after 15 idle minutes. Every reply is still delivered to the couple's inbox, which is the real record; `/admin` is a convenience view.
 - **Railway, Fly.io, a small VPS** — any host that runs Node and can reach `https://api.brevo.com`.
 
-This repo ships `render.yaml`, a blueprint for a free instance:
+### Deploying on Abasthan
+
+Abasthan runs Node web services directly, so the RSVP email and `/admin` both work:
+
+1. **Create App → Web Service**, connect GitHub and pick `Abilar001/Wedding-invite`, branch `main`.
+2. Runtime **Node.js 22**, root directory empty, build command `npm ci --omit=dev`, start command `npm start`.
+3. Add `BREVO_API_KEY`, `RSVP_FROM_EMAIL`, `RSVP_TO_EMAIL`, `FROM_NAME`, `ADMIN_PASSWORD` and `ADMIN_SESSION_SECRET` under **Environment**. `.env` is git-ignored, so it never reaches the platform from Git — use **Import .env File** to paste the same keys, or type them in.
+4. Deploy, then check `/api/health` reports `"mail":"configured"` and sign in at `/admin`.
+5. Turn on **Auto-Deploy** so pushes to `main` roll out automatically.
+
+The free plan gives one app a `https://<name>.abasthan.app` URL with SSL. For a custom domain, add it under the service's **Custom Domains** settings and create the CNAME the dashboard shows (subdomain → `abasthan.app`) or the A record it gives for an apex domain.
+
+Containers are rebuilt from Git on every deploy, so `data/rsvps.jsonl` and `data/invitations.json` are lost each time; the couple's inbox remains the record and `/admin` is a view of whatever the current instance holds.
+
+This repo also ships `render.yaml`, a blueprint for a free Render instance:
 
 1. Push the repository to GitHub (`git init`, stage, commit, then add your remote).
 2. On Render: **New → Blueprint**, pick the repo. Render creates the service and prompts for the values marked `sync: false`.

@@ -204,7 +204,9 @@ app.use((err, req, res, next) => {
 /* ------------------------------------------------------------------ */
 /* Start                                                               */
 /* ------------------------------------------------------------------ */
-const server = app.listen(PORT, () => {
+/* Bind all interfaces: cloud hosts (Render, Abasthan, Fly) route to the
+   container's external interface and cannot reach a loopback-only listener. */
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log('');
   console.log('  Kishin & Jessica - wedding invitation');
   console.log('  Local:  http://localhost:' + PORT);
