@@ -1,6 +1,6 @@
 # Kishin &amp; Jessica — 3D Wedding Invitation
 
-A single-page, cinematic wedding invitation for **Kishin & Jessica A. Pelipil** — December 08, 2026, Capoocan, Leyte.
+A single-page, cinematic wedding invitation for **Kishin & Jessica Pelipel** — December 08, 2026, Capoocan, Leyte.
 
 ## Run locally
 
