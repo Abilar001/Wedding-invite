@@ -191,7 +191,7 @@ Abasthan runs Node web services directly, so the RSVP email and `/admin` both wo
 
 Missing variables never crash the app: it still boots, `/api/health` reports `"mail":"missing-credentials"`, RSVP submissions return `503`, and `/admin` returns `503`. So you can deploy first and add secrets afterwards — open the service's **Environment** tab, save the keys, then press **Redeploy** (or restart) so the process picks them up.
 
-The repo ships a root `index.js` entry point and a `build` script, so Abasthan's detected `npm install && npm run build` and either start command (`npm start` or `node index.js`) all work. If you fill the build command in by hand, `npm ci --omit=dev` is enough; if the app crashes on boot, check that the start command is not pointing at a file the repo does not have.
+The repo ships a root `index.js` entry point, and `npm run build` installs the production dependencies (`npm ci --omit=dev`), so Abasthan's default `npm install && npm run build` and either start command (`npm start` or `node index.js`) all work — including when the build command is just `npm run build`. If the app exits with `ERR_MODULE_NOT_FOUND: Cannot find package 'dotenv'` (or `'express'`), the build step never installed dependencies: set the build command to `npm ci --omit=dev`.
 
 The free plan gives one app a `https://<name>.abasthan.app` URL with SSL. For a custom domain, add it under the service's **Custom Domains** settings and create the CNAME the dashboard shows (subdomain → `abasthan.app`) or the A record it gives for an apex domain.
 

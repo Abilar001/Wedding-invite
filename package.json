@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "build": "echo no build step needed"
+    "build": "npm ci --omit=dev"
   },
   "engines": {
     "node": ">=18"
